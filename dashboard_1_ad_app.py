@@ -5,8 +5,18 @@ import matplotlib.pyplot as plt # type: ignore
 
 # ============ 页面配置 ============
 st.set_page_config(page_title="Alibaba CTR Dashboard", layout="wide")
-st.title("🛍️ Alibaba CTR Prediction — Business Overview")
-st.caption("Based on full 1M-row sample. Overall CTR baseline = 5.16%")
+st.markdown("## 🛍️ Alibaba CTR Prediction — Business Overview")
+st.caption("Based on full 1M-row sample · Overall CTR baseline = 5.16% · UCLA MDSH Capstone 2026")
+
+with st.expander("ℹ️ About this dashboard"):
+    st.markdown("""
+    This dashboard explores user behavior patterns on Alibaba's Taobao advertising dataset
+    to inform CTR prediction modeling. Every chart is designed to answer: 
+    *"What does this tell us for feature engineering?"*
+    
+    **How to use**: Apply filters in the left sidebar to slice by gender, age, or shopping depth.  
+    **Data**: 1,023,313 impressions · 408,578 unique users · 8-day window (May 6–13, 2017).
+    """)
 
 # ============ 常量:label 映射(来自 2b)============
 DIMENSIONS = {
@@ -19,7 +29,14 @@ DIMENSIONS = {
 }
 MIN_IMPRESSIONS = 500  # 来自 2b,小样本过滤阈值
 BASELINE_CTR = 5.16    # 来自 notebook 的整体 CTR
-
+NICE_NAMES = {
+    'age_level': 'Age Group',
+    'final_gender_code': 'Gender',
+    'pvalue_level': 'Consumption Level',
+    'shopping_level': 'Shopping Depth',
+    'new_user_class_level': 'City Tier',
+    'occupation': 'Occupation'
+} #让读者更好理解
 # ============ 数据加载 ============
 @st.cache_data
 def load_data():
@@ -92,18 +109,20 @@ if len(df_f) < len(df):
 st.markdown("---")
 
 # ============ 2. CTR Spread Summary(Tab 1 的核心 killer 图)============
+
+# ============ 2. CTR Spread Summary ============
 st.subheader("🎯 CTR Spread by User Dimension")
 st.caption("How much does CTR vary across each dimension? Larger spread = stronger modeling signal.")
 
 spread_data = []
 for dim, label_map in DIMENSIONS.items():
-    sub = df[[dim, 'clk']].dropna()  # 全量数据算 spread,不受 filter 影响
+    sub = df[[dim, 'clk']].dropna()
     grp = sub.groupby(dim)['clk'].agg(['count', 'mean']).reset_index()
     grp = grp[grp['count'] >= MIN_IMPRESSIONS]
     if len(grp) > 0:
         ctrs = grp['mean'] * 100
         spread_data.append({
-            'dimension': dim,
+            'dimension': NICE_NAMES.get(dim, dim),
             'min_ctr': ctrs.min(),
             'max_ctr': ctrs.max(),
             'spread': ctrs.max() - ctrs.min()
@@ -111,28 +130,37 @@ for dim, label_map in DIMENSIONS.items():
 
 spread_df = pd.DataFrame(spread_data).sort_values('spread', ascending=True)
 
-fig, ax = plt.subplots(figsize=(10, 5))
-colors = ['#2ecc71' if s > 0.3 else '#e67e22' if s > 0.15 else '#95a5a6' 
+fig, ax = plt.subplots(figsize=(10, 4.5))
+colors = ['#27ae60' if s > 0.3 else '#e67e22' if s > 0.15 else '#95a5a6'
           for s in spread_df['spread']]
-ax.barh(spread_df['dimension'], spread_df['spread'], color=colors)
+bars = ax.barh(spread_df['dimension'], spread_df['spread'], color=colors, edgecolor='white')
 for i, (dim, spread) in enumerate(zip(spread_df['dimension'], spread_df['spread'])):
-    ax.text(spread + 0.01, i, f"{spread:.2f}pp", va='center', fontsize=10)
-ax.set_xlabel('CTR Spread (percentage points)')
-ax.set_title('User Dimension Impact Ranking')
+    ax.text(spread + 0.01, i, f"{spread:.2f}pp", va='center', fontsize=10, fontweight='bold')
+ax.set_xlabel('CTR Spread (percentage points)', fontsize=11)
+ax.set_title('User Dimension Impact Ranking', fontsize=13, fontweight='bold', pad=15)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.set_xlim(0, max(spread_df['spread']) * 1.2)
 plt.tight_layout()
 st.pyplot(fig)
 plt.close(fig)
 
-st.info("💡 **Modeling Implication**: Dimensions with larger spread (green) deserve higher "
-        "priority in feature engineering. Low-spread dimensions add noise without signal.")
+# 加 legend 解释颜色含义
+col_a, col_b, col_c = st.columns(3)
+col_a.markdown("🟢 **Strong signal** (>0.30pp)")
+col_b.markdown("🟠 **Moderate** (0.15-0.30pp)")
+col_c.markdown("⚪ **Weak** (<0.15pp)")
 
-st.markdown("---")
+st.info("💡 **Modeling Implication**: Age Group (0.66pp) and Gender (0.39pp) show the strongest "
+        "CTR variation — these should be first-priority features. Shopping Depth and City Tier "
+        "add moderate signal. Low-spread dimensions risk adding noise without useful signal.")
 
 # ============ 3. Temporal Trends ============
 st.subheader("⏰ Temporal Trends")
 
 col_l, col_r = st.columns(2)
 
+# Hourly CTR
 # Hourly CTR
 with col_l:
     hourly = df_f.groupby('hour').agg(
@@ -144,20 +172,33 @@ with col_l:
     fig, ax = plt.subplots(figsize=(8, 4))
     ax2 = ax.twinx()
     ax.bar(hourly['hour'], hourly['impressions'], color='steelblue',
-           alpha=0.6, label='Impressions')
-    ax2.plot(hourly['hour'], hourly['ctr'], color='coral',
-             marker='o', linewidth=2, label='CTR')
-    ax2.axhline(y=BASELINE_CTR, color='red', linestyle='--',
-                alpha=0.5, label=f'Baseline {BASELINE_CTR}%')
-    ax.set_xlabel('Hour (Beijing time)')
-    ax.set_ylabel('Impressions', color='steelblue')
-    ax2.set_ylabel('CTR (%)', color='coral')
-    ax.set_title('Hourly Pattern')
-    ax2.legend(loc='upper left', fontsize=8)
+           alpha=0.3, label='Impressions')
+    ax2.plot(hourly['hour'], hourly['ctr'], color='#e74c3c',
+             marker='o', linewidth=2.5, markersize=6, label='CTR')
+    ax2.axhline(y=BASELINE_CTR, color='gray', linestyle='--',
+                alpha=0.6, label=f'Baseline {BASELINE_CTR}%')
+    
+    # 标注 golden hour(最高 CTR 的时段)
+    peak_row = hourly.loc[hourly['ctr'].idxmax()]
+    ax2.annotate(f"Peak: {peak_row['ctr']:.2f}%\n@ {int(peak_row['hour'])}:00",
+                 xy=(peak_row['hour'], peak_row['ctr']),
+                 xytext=(peak_row['hour']-3, peak_row['ctr']+0.3),
+                 fontsize=9, color='#c0392b',
+                 arrowprops=dict(arrowstyle='->', color='#c0392b', alpha=0.6))
+    
+    ax.set_xlabel('Hour (Beijing time)', fontsize=10)
+    ax.set_ylabel('Impressions', color='steelblue', fontsize=10)
+    ax2.set_ylabel('CTR (%)', color='#e74c3c', fontsize=10)
+    ax2.set_ylim(4.0, max(hourly['ctr']) + 0.5)
+    ax.set_title('Hourly Pattern', fontsize=12, fontweight='bold')
+    ax2.legend(loc='upper left', fontsize=8, framealpha=0.9)
+    ax.spines['top'].set_visible(False)
+    ax2.spines['top'].set_visible(False)
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
 
+# Weekday vs Weekend
 # Weekday vs Weekend
 with col_r:
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -169,19 +210,32 @@ with col_r:
     daily['day_name'] = daily['day_of_week'].apply(lambda x: day_names[x])
     
     fig, ax = plt.subplots(figsize=(8, 4))
-    colors_day = ['steelblue' if d < 5 else 'coral' for d in daily['day_of_week']]
-    ax.bar(daily['day_name'], daily['ctr'], color=colors_day)
-    ax.axhline(y=BASELINE_CTR, color='red', linestyle='--',
-               alpha=0.5, label=f'Baseline {BASELINE_CTR}%')
-    ax.set_ylabel('CTR (%)')
-    ax.set_title('CTR by Day of Week (blue=weekday, coral=weekend)')
-    ax.legend()
+    colors_day = ['#3498db' if d < 5 else '#e67e22' for d in daily['day_of_week']]
+    bars = ax.bar(daily['day_name'], daily['ctr'], color=colors_day, edgecolor='white')
+    ax.axhline(y=BASELINE_CTR, color='gray', linestyle='--',
+               alpha=0.6, label=f'Baseline {BASELINE_CTR}%')
+    
+    # 柱子顶部加数值
+    for bar, val in zip(bars, daily['ctr']):
+        ax.text(bar.get_x() + bar.get_width()/2, val + 0.02,
+                f'{val:.2f}', ha='center', fontsize=9)
+    
+    ax.set_ylabel('CTR (%)', fontsize=10)
+    ax.set_ylim(4.5, max(daily['ctr']) + 0.3)
+    ax.set_title('CTR by Day of Week', fontsize=12, fontweight='bold')
+    ax.legend(fontsize=8, loc='lower right')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
 
-st.markdown("---")
-
+# 在 Temporal 段最后加一个解读框
+st.info("💡 **Temporal Insight**: CTR remains remarkably stable across days and hours "
+        "(spread <0.4pp), suggesting that **time-of-day features alone offer limited signal**. "
+        "Impression volume peaks at 9-10 PM, but CTR does not follow — evening users browse "
+        "more but don't click proportionally more.")
+# ============ 4. CTR by Placement & Price ============
 # ============ 4. CTR by Placement & Price ============
 st.subheader("📍 Ad Placement & Price")
 
@@ -196,16 +250,20 @@ with col_l:
     pid_grp['ctr'] = pid_grp['clicks'] / pid_grp['impressions'] * 100
     
     fig, ax = plt.subplots(figsize=(8, 4))
-    bars = ax.bar(pid_grp['pid'], pid_grp['ctr'], color=['steelblue', 'coral'])
-    ax.axhline(y=BASELINE_CTR, color='red', linestyle='--',
-               alpha=0.5, label=f'Baseline {BASELINE_CTR}%')
-    for bar, val in zip(bars, pid_grp['ctr']):
+    bars = ax.bar(pid_grp['pid'], pid_grp['ctr'], 
+                   color=['#3498db', '#e67e22'], edgecolor='white')
+    ax.axhline(y=BASELINE_CTR, color='gray', linestyle='--',
+               alpha=0.6, label=f'Baseline {BASELINE_CTR}%')
+    for bar, val, imp in zip(bars, pid_grp['ctr'], pid_grp['impressions']):
         ax.text(bar.get_x() + bar.get_width()/2, val + 0.05,
-                f'{val:.2f}%', ha='center', fontsize=10)
-    ax.set_ylabel('CTR (%)')
-    ax.set_title('CTR by Ad Placement')
+                f'{val:.2f}%\n(n={imp:,})', ha='center', fontsize=9)
+    ax.set_ylabel('CTR (%)', fontsize=10)
+    ax.set_ylim(4.5, max(pid_grp['ctr']) + 0.6)
+    ax.set_title('CTR by Ad Placement', fontsize=12, fontweight='bold')
     ax.tick_params(axis='x', rotation=15)
-    ax.legend()
+    ax.legend(fontsize=8)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
@@ -219,27 +277,32 @@ with col_r:
     price_grp['ctr'] = price_grp['clicks'] / price_grp['impressions'] * 100
     
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(price_grp['price_bucket'].astype(str), price_grp['ctr'], color='coral')
-    ax.axhline(y=BASELINE_CTR, color='red', linestyle='--',
-               alpha=0.5, label=f'Baseline {BASELINE_CTR}%')
-    ax.set_ylabel('CTR (%)')
-    ax.set_xlabel('Price Range (CNY)')
-    ax.set_title('CTR by Price Range (p99 capped)')
-    ax.legend()
+    # 渐变色:越便宜 CTR 越高,用暖色;越贵越冷色
+    colors_price = ['#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c']
+    bars = ax.bar(price_grp['price_bucket'].astype(str), price_grp['ctr'], 
+                   color=colors_price, edgecolor='white')
+    ax.axhline(y=BASELINE_CTR, color='gray', linestyle='--',
+               alpha=0.6, label=f'Baseline {BASELINE_CTR}%')
+    for bar, val in zip(bars, price_grp['ctr']):
+        ax.text(bar.get_x() + bar.get_width()/2, val + 0.03,
+                f'{val:.2f}%', ha='center', fontsize=9)
+    ax.set_ylabel('CTR (%)', fontsize=10)
+    ax.set_xlabel('Price Range (CNY)', fontsize=10)
+    ax.set_ylim(4.0, max(price_grp['ctr']) + 0.5)
+    ax.set_title('CTR by Price Range (p99 capped)', fontsize=12, fontweight='bold')
+    ax.legend(fontsize=8)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
 
-st.info("💡 **Finding**: Price shows a clear monotonic decrease — the 0-100 CNY sweet spot is "
-        "consistent across user segments. Ad placement difference is modest (~0.3pp).")
+st.info("💡 **Finding**: Price shows a clear monotonic decrease — the 0-100 CNY sweet spot "
+        "is consistent across user segments. Ad placement difference is modest (~0.3pp), "
+        "suggesting placement may be less impactful than user or price characteristics.")
 
-st.markdown("---")
 
 # ============ 5. User Segment CTR ============
-st.subheader("👥 CTR by User Segment")
-
-seg_col1, seg_col2 = st.columns(2)
-
 def plot_segment(ax, dim, label_map, title):
     grp = df_f[[dim, 'clk']].dropna().groupby(dim).agg(
         impressions=('clk', 'count'),
@@ -247,52 +310,25 @@ def plot_segment(ax, dim, label_map, title):
     ).reset_index()
     grp['ctr'] = grp['clicks'] / grp['impressions'] * 100
     grp['label'] = grp[dim].map(label_map)
-    # 过滤掉 map 后仍为 NaN 的行(label_map 里没有的 key)
     grp = grp.dropna(subset=['label'])
     grp['label'] = grp['label'].astype(str)
     
-    bars = ax.bar(grp['label'], grp['ctr'], color='steelblue')
-    ax.axhline(y=BASELINE_CTR, color='red', linestyle='--',
-               alpha=0.5, label=f'Baseline {BASELINE_CTR}%')
+    bars = ax.bar(grp['label'], grp['ctr'], color='#3498db', edgecolor='white')
+    ax.axhline(y=BASELINE_CTR, color='gray', linestyle='--',
+               alpha=0.6, label=f'Baseline {BASELINE_CTR}%')
     for bar, val in zip(bars, grp['ctr']):
-        ax.text(bar.get_x() + bar.get_width()/2, val + 0.05,
+        ax.text(bar.get_x() + bar.get_width()/2, val + 0.03,
                 f'{val:.2f}', ha='center', fontsize=9)
-    ax.set_title(title)
-    ax.set_ylabel('CTR (%)')
-    ax.legend(fontsize=8)
-
-with seg_col1:
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot_segment(ax, 'age_level', DIMENSIONS['age_level'], 'CTR by Age Group')
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
-
-with seg_col2:
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot_segment(ax, 'pvalue_level', DIMENSIONS['pvalue_level'], 'CTR by Consumption Level')
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
-
-seg_col3, seg_col4 = st.columns(2)
-
-with seg_col3:
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot_segment(ax, 'shopping_level', DIMENSIONS['shopping_level'], 'CTR by Shopping Depth')
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
-
-with seg_col4:
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot_segment(ax, 'new_user_class_level', DIMENSIONS['new_user_class_level'], 'CTR by City Tier')
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
-
-st.markdown("---")
-
+    ax.set_title(title, fontsize=12, fontweight='bold')
+    ax.set_ylabel('CTR (%)', fontsize=10)
+    # Y 轴聚焦:从接近最小值开始,顶部留空间
+    y_min = min(grp['ctr'].min(), BASELINE_CTR) - 0.3
+    y_max = grp['ctr'].max() + 0.4
+    ax.set_ylim(max(0, y_min), y_max)
+    ax.legend(fontsize=8, loc='lower right')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
 # ============ 6. Profile Matching Signal(来自 2b 的巧思)============
 st.subheader("🔍 Missingness as a Signal")
 
@@ -322,11 +358,42 @@ with col_l:
     plt.close(fig)
 
 with col_r:
-    st.info("💡 **Insight**: Profile-missing rows are not noise — they form a distinct "
-            "segment. We engineer `is_profile_matched` as a binary feature to capture "
-            "this signal, rather than discarding or imputing the information.")
+    st.info("💡 **Key Insight**: Profile-missing rows are **not noise** — they form a distinct "
+            "behavioral segment. We engineered `is_profile_matched` as a binary feature to capture "
+            "this signal, rather than discarding or imputing the information.\n\n"
+            "This is a **methodology improvement** over baseline approaches that simply fill NaN "
+            "with median/mode.")
 
 st.markdown("---")
+
+# ============ 关键发现总结 ============
+st.markdown("---")
+st.subheader("🎯 Key Findings & Modeling Recommendations")
+
+col_a, col_b = st.columns(2)
+
+with col_a:
+    st.markdown("""
+    **🔝 High-priority features**
+    - `age_level` (0.66pp spread)
+    - `final_gender_code` (0.39pp)
+    - `pvalue_level` (0.37pp)
+    - `price_bucket` (monotonic trend)
+    - `is_profile_matched` (novel)
+    """)
+
+with col_b:
+    st.markdown("""
+    **⚠️ Limited-signal features**
+    - `shopping_level` (0.20pp)
+    - `new_user_class_level` (0.20pp)
+    - `hour_of_day` (<0.5pp variation)
+    - Anonymous ID rankings (`cate_id`, `brand`) — interpretable only in aggregate
+    """)
+
+st.success("✅ **Recommendation for modeling**: Prioritize the 5 high-signal features above. "
+           "Explore `age × pvalue` and `shopping × pvalue` interactions (not shown here — "
+           "see Module 2b for interaction heatmaps with 1.55pp spread).")
 
 # ============ 7. Methodology Note ============
 with st.expander("📋 Methodology Note: Missing Value Handling"):
