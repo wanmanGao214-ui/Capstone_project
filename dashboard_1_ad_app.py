@@ -25,6 +25,7 @@ DIMENSIONS = {
                           5:'35-39', 6:'40-49', 7:'50+'},
     'pvalue_level':      {1: 'Low', 2: 'Mid', 3: 'High'},
     'shopping_level':    {1: 'Shallow', 2: 'Moderate', 3: 'Deep'},
+    'occupation':        {0: 'Non-Student', 1: 'Student'},
     'new_user_class_level': {1:'Tier-1', 2:'Tier-2', 3:'Tier-3', 4:'Rural/Other'}
 }
 MIN_IMPRESSIONS = 500  # 来自 2b,小样本过滤阈值
@@ -112,7 +113,8 @@ st.markdown("---")
 
 # ============ 2. CTR Spread Summary ============
 st.subheader("🎯 CTR Spread by User Dimension")
-st.caption("How much does CTR vary across each dimension? Larger spread = stronger modeling signal.")
+st.caption("How much does CTR vary across each dimension? Larger spread = stronger modeling signal."
+           "**pp** = percentage points (absolute CTR difference between highest and lowest segment).")
 
 spread_data = []
 for dim, label_map in DIMENSIONS.items():
