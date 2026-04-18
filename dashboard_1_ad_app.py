@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt # type: ignore
 # ============ 页面配置 ============
 st.set_page_config(page_title="Alibaba CTR Dashboard", layout="wide")
 st.markdown("## 🛍️ Alibaba CTR Prediction — Business Overview")
-st.caption("Based on full 1M-row sample · Overall CTR baseline = 5.16% · UCLA MDSH Capstone 2026")
+st.caption("Based on full 1M-row sample · Overall CTR baseline = 5.16%  \nUCLA MDSH Capstone 2026")
 
 with st.expander("ℹ️ About this dashboard"):
     st.markdown("""
@@ -113,8 +113,7 @@ st.markdown("---")
 
 # ============ 2. CTR Spread Summary ============
 st.subheader("🎯 CTR Spread by User Dimension")
-st.caption("How much does CTR vary across each dimension? Larger spread = stronger modeling signal."
-           "**pp** = percentage points (absolute CTR difference between highest and lowest segment).")
+st.caption("How much does CTR vary across each dimension?  \nLarger spread = stronger modeling signal.  \n**pp** = percentage points (absolute CTR difference between highest and lowest segment).")
 
 spread_data = []
 for dim, label_map in DIMENSIONS.items():
