@@ -920,7 +920,8 @@ def get_bubble_data(dim_col, top_n=50):
         COUNT(*) AS impressions,
         SUM(clk) AS clicks,
         COUNT(DISTINCT user_id) AS users,
-        AVG(clk) * 100 AS ctr
+        AVG(clk) * 100 AS ctr,
+        AVG(price) AS avg_price
     FROM wide
     WHERE {dim_col} IS NOT NULL
     GROUP BY segment
@@ -942,8 +943,33 @@ if len(bubble_df) > 0:
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # 气泡大小映射
-    size_scale = bubble_df['users'] / bubble_df['users'].max() * 500 + 20
+    # 气泡大小改成平均价格
+    bubble_df['avg_price'] = bubble_df['avg_price'].fillna(bubble_df['avg_price'].median())
+    size = (bubble_df['avg_price'] / bubble_df['avg_price'].max() * 500).clip(lower=20)
     
+    colors_quad = []
+    for _, row in bubble_df.iterrows():
+        if row['impressions'] >= median_imp and row['ctr'] >= median_ctr:
+         colors_quad.append('#27ae60')
+        elif row['impressions'] < median_imp and row['ctr'] >= median_ctr:
+         colors_quad.append('#3498db')
+        elif row['impressions'] >= median_imp and row['ctr'] < median_ctr:
+          colors_quad.append('#e67e22')
+        else:
+            colors_quad.append('#95a5a6')
+    
+    scatter = ax.scatter(
+    bubble_df['impressions'], bubble_df['ctr'],
+    s=size,                          # 这里用 size 不用 size_scale
+    c=colors_quad,
+    alpha=0.6, edgecolors='white', linewidth=0.5
+)
+    # 加气泡大小图例
+    for price, label in [(200, '¥200'), (500, '¥500'), (1000, '¥1000')]:
+            ax.scatter([], [], s=price/bubble_df['avg_price'].max()*500,
+               c='gray', alpha=0.4, label=f'Avg Price {label}')
+    ax.legend(title='Bubble size = avg price',
+            fontsize=8, loc='lower right')
     # 四象限颜色
     colors_quad = []
     for _, row in bubble_df.iterrows():
@@ -957,7 +983,7 @@ if len(bubble_df) > 0:
             colors_quad.append('#95a5a6')  # 低曝光 低CTR = 低优先级
     
     scatter = ax.scatter(bubble_df['impressions'], bubble_df['ctr'],
-                         s=size_scale, c=colors_quad, alpha=0.6, edgecolors='white', linewidth=0.5)
+                         s=size, c=colors_quad, alpha=0.6, edgecolors='white', linewidth=0.5)
     
     # 画四象限线
     ax.axhline(y=median_ctr, color='gray', linestyle='--', alpha=0.5)
