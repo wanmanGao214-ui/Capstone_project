@@ -1078,7 +1078,11 @@ with col_l:
     ax.set_xlabel('CTR (%)')
     ax.set_title('CTR: Profile-matched vs Unmatched (± 95% CI)')
     ax.legend(fontsize=8)
-    plt.tight_layout()
+    #plt.tight_layout()
+    try:
+        plt.tight_layout()
+    except (ValueError, Exception):
+        pass
     st.pyplot(fig)
     plt.close(fig)
 
